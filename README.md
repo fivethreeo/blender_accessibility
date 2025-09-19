@@ -18,6 +18,7 @@ A lightweight Qt-based control panel application for sending keyboard events to 
 
 ## Screenshot
 
+![screenshot](screenshot.png)
 
 ## Installation
 
