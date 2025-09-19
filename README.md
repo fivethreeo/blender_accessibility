@@ -35,7 +35,7 @@ sudo dnf install qt6-qtbase-devel libX11-devel cmake gcc-c++
 
 ```bash
 # Clone the repository
-git clone https://github.com/fivethreeo/ControlPanel.git
+git clone https://github.com/fivethreeo/blender_accessibility.git
 cd ControlPanel
 
 # Create build directory
@@ -74,17 +74,6 @@ sudo usermod -a -G input $USER
    - Click "Start Control"
 
 3. **Control Panel Operations**:
-   - **Shift/Ctrl/Alt**: Toggle modifier keys (green = active)
-   - **+**: Send Numpad + key to target application
-   - **×**: Close the application
-   - **≡**: Drag to move the control panel
-
-4. **Blender Workflow**:
-   - The panel is optimized for Blender - it ensures proper 3D view focus
-   - Mouse automatically returns to button position after operations
-   - Perfect for navigation and quick modifier key toggling
-
-## Key Bindings
 
 | Button | Function | Blender Use Case |
 |--------|----------|------------------|
@@ -94,6 +83,12 @@ sudo usermod -a -G input $USER
 | + | Send Numpad Plus | Zoom in, add objects |
 | × | Close Application | Exit ControlPanel |
 | ≡ | Drag Panel | Reposition control panel |
+
+4. **Blender Workflow**:
+   - The panel is optimized for Blender - it ensures proper 3D view focus
+   - Mouse automatically returns to button position after operations
+   - Perfect for navigation and quick modifier key toggling
+
 
 ## Technical Details
 
@@ -106,15 +101,6 @@ sudo usermod -a -G input $USER
 - Linux with X11 window system
 - Qt6 compatible distributions
 - Kernel 4.4+ with input subsystem support
-
-### File Structure
-```
-ControlPanel/
-├── CMakeLists.txt    # Build configuration
-├── main.cpp         # Main application source
-├── README.md        # This file
-└── build/           # Build directory (created)
-```
 
 ## Troubleshooting
 
@@ -174,7 +160,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 - Qt Framework for the excellent cross-platform GUI library
 - X11 developers for window management capabilities
-- Blender community for inspiration and testing
+- Blender community for inspiration
 
 ## Support
 
