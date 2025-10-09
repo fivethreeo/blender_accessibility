@@ -1,4 +1,5 @@
 #include <QApplication>
+#include <QQueue>  // Add this include
 #include <QMainWindow>
 #include <QPushButton>
 #include <QVBoxLayout>
@@ -31,6 +32,60 @@
 #include <X11/Xutil.h>
 #include <X11/Xatom.h>
 #include <X11/Xresource.h>
+class MouseMonitor : public QObject {
+    Q_OBJECT
+public:
+    MouseMonitor(QObject *parent = nullptr) : QObject(parent) {
+        monitorTimer = new QTimer(this);
+        connect(monitorTimer, &QTimer::timeout, this, &MouseMonitor::recordMousePosition);
+        monitorTimer->start(50); // Check every 50ms (20 samples per second)
+    }
+
+    ~MouseMonitor() {
+        monitorTimer->stop();
+    }
+
+    QPoint getMostFrequentPosition() {
+        if (positionQueue.isEmpty()) {
+            return QCursor::pos();
+        }
+
+        // Count frequency of each position in the queue
+        QHash<QPoint, int> frequency;
+        for (const QPoint &pos : positionQueue) {
+            frequency[pos]++;
+        }
+
+        // Find the most frequent position
+        QPoint mostFrequent;
+        int maxCount = 0;
+        for (auto it = frequency.begin(); it != frequency.end(); ++it) {
+            if (it.value() > maxCount) {
+                maxCount = it.value();
+                mostFrequent = it.key();
+            }
+        }
+
+        qDebug() << "Most frequent mouse position in last second:" << mostFrequent << "count:" << maxCount << "total samples:" << positionQueue.size();
+        return mostFrequent;
+    }
+
+private slots:
+    void recordMousePosition() {
+        QPoint currentPos = QCursor::pos();
+        
+        positionQueue.enqueue(currentPos);
+
+        // Keep only last 3 second of data (20 samples at 50ms interval)
+        while (positionQueue.size() > 60) {
+            positionQueue.dequeue();
+        }
+    }
+
+private:
+    QTimer *monitorTimer;
+    QQueue<QPoint> positionQueue; // FIFO queue for last 1 second of positions
+};
 
 class SetupDialog : public QDialog {
     Q_OBJECT
@@ -371,6 +426,9 @@ public:
             return;
         }
 
+        // Start mouse monitoring
+        mouseMonitor = new MouseMonitor(this);
+
         setupUI();
         loadSettings();
         
@@ -403,9 +461,6 @@ public:
 private slots:
     void onToggle1Clicked() {
         QPoint originalMousePos = QCursor::pos();
-        // Move mouse away before focusing window
-        moveMouseAway();
-        focusSelectedWindow();
         toggle1State = !toggle1State;
         updateButtonAppearance(btnToggle1, toggle1State);
         sendKeyEvent(KEY_LEFTSHIFT, toggle1State ? 1 : 0);
@@ -415,8 +470,7 @@ private slots:
     void onToggle2Clicked() {
         QPoint originalMousePos = QCursor::pos();
         // Move mouse away before focusing window
-        moveMouseAway();
-        focusSelectedWindow();
+
         toggle2State = !toggle2State;
         updateButtonAppearance(btnToggle2, toggle2State);
         sendKeyEvent(KEY_LEFTCTRL, toggle2State ? 1 : 0);
@@ -426,8 +480,7 @@ private slots:
     void onToggle3Clicked() {
         QPoint originalMousePos = QCursor::pos();
         // Move mouse away before focusing window
-        moveMouseAway();
-        focusSelectedWindow();
+
         toggle3State = !toggle3State;
         updateButtonAppearance(btnToggle3, toggle3State);
         sendKeyEvent(KEY_LEFTALT, toggle3State ? 1 : 0);
@@ -644,7 +697,7 @@ private:
         connect(btnF, &QPushButton::clicked, this, &ControlPanel::onFClicked);
         connect(btnB, &QPushButton::clicked, this, &ControlPanel::onBClicked);
         connect(closeButton, &QPushButton::clicked, this, &ControlPanel::onCloseClicked);
-
+        centralWidget->installEventFilter(this);
         // Initial button states
         updateButtonAppearance(btnToggle1, toggle1State);
         updateButtonAppearance(btnToggle2, toggle2State);
@@ -717,15 +770,11 @@ private:
     }
 
     void moveMouseAway() {
-        // Move mouse to center of screen
-        QScreen *screen = QGuiApplication::primaryScreen();
-        if (!screen) return;
-        QRect screenGeometry = screen->geometry();
-        QPoint center = screenGeometry.center();
-        QCursor::setPos(center);
-        qDebug() << "Mouse moved away to safe position";
+        // Get the most frequent mouse position from the last second
+        QCursor::setPos(storedMousePosition);
+        qDebug() << "Mouse moved to most frequent position:" << storedMousePosition;
     }
-    
+
     void returnMouseToPosition(const QPoint &position) {
         QCursor::setPos(position);
         qDebug() << "Mouse returned to position:" << position;
@@ -822,6 +871,14 @@ private:
     }
 
     bool eventFilter(QObject *obj, QEvent *event) override {
+
+        // Handle mouse enter events for the central widget
+        if (obj == centralWidget() && event->type() == QEvent::Enter) {
+            // Store the most frequent mouse position when mouse enters the dialog
+            storedMousePosition = mouseMonitor->getMostFrequentPosition();
+            qDebug() << "Mouse entered dialog, stored position:" << storedMousePosition;
+        }
+        
         if (obj == dragButton) {
             if (event->type() == QEvent::MouseButtonPress) {
                 QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
@@ -868,6 +925,8 @@ private:
     bool toggle2State = false;
     bool toggle3State = false;
     QPoint dragPosition;
+    MouseMonitor *mouseMonitor = nullptr;
+    QPoint storedMousePosition;
 };
 
 int main(int argc, char *argv[]) {
