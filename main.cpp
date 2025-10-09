@@ -37,7 +37,7 @@ class SetupDialog : public QDialog {
 public:
     SetupDialog(QWidget *parent = nullptr) : QDialog(parent) {
         setWindowFlags(Qt::FramelessWindowHint);
-        setFixedSize(300, 180);
+        setFixedSize(350, 220);
 
         // Open X11 display
         xdisplay = XOpenDisplay(NULL);
@@ -56,10 +56,20 @@ public:
         titleLabel->setAlignment(Qt::AlignCenter);
         mainLayout->addWidget(titleLabel);
 
-        // Window selection with label
+        // Window selection with label and refresh button
+        QHBoxLayout *windowLayout = new QHBoxLayout();
         QLabel *windowLabel = new QLabel("Window:", this);
         windowLabel->setStyleSheet("QLabel { color: #cccccc; }");
-        mainLayout->addWidget(windowLabel);
+        windowLayout->addWidget(windowLabel);
+        
+        windowLayout->addStretch();
+        
+        QPushButton *refreshButton = new QPushButton("Refresh", this);
+        refreshButton->setFixedSize(60, 28);
+        refreshButton->setStyleSheet("QPushButton { background-color: #666666; color: white; border: 1px solid #888888; border-radius: 3px; font-size: 10px; } QPushButton:hover { background-color: #777777; }");
+        windowLayout->addWidget(refreshButton);
+        
+        mainLayout->addLayout(windowLayout);
         
         windowCombo = new QComboBox(this);
         windowCombo->setFixedHeight(28);
@@ -76,6 +86,12 @@ public:
         populateKeyboards();
         mainLayout->addWidget(keyboardCombo);
 
+        // Status label
+        statusLabel = new QLabel("", this);
+        statusLabel->setStyleSheet("QLabel { color: #aaaaaa; font-size: 10px; }");
+        statusLabel->setAlignment(Qt::AlignCenter);
+        mainLayout->addWidget(statusLabel);
+
         // OK button
         QPushButton *okButton = new QPushButton("Start Control", this);
         okButton->setFixedHeight(32);
@@ -83,6 +99,9 @@ public:
         mainLayout->addWidget(okButton);
 
         connect(okButton, &QPushButton::clicked, this, &QDialog::accept);
+        connect(refreshButton, &QPushButton::clicked, this, &SetupDialog::refreshWindows);
+        
+        updateStatus();
     }
 
     ~SetupDialog() {
@@ -103,13 +122,71 @@ public:
         return windowCombo->currentData().toString();
     }
 
+private slots:
+    void refreshWindows() {
+        windowCombo->clear();
+        populateWindows();
+        updateStatus();
+    }
+
 private:
+    void updateStatus() {
+        QString status = QString("Found %1 windows, %2 keyboards").arg(windowCombo->count()).arg(keyboardCombo->count());
+        statusLabel->setText(status);
+    }
+
+    QString getWindowTitle(Window win) {
+        QString title;
+        
+        // Method 1: Try _NET_WM_NAME (UTF-8)
+        Atom netWmName = XInternAtom(xdisplay, "_NET_WM_NAME", False);
+        Atom utf8String = XInternAtom(xdisplay, "UTF8_STRING", False);
+        
+        Atom actualType;
+        int actualFormat;
+        unsigned long nitems, bytesAfter;
+        unsigned char *prop = NULL;
+        
+        if (XGetWindowProperty(xdisplay, win, netWmName, 0, 1024, False, utf8String,
+                              &actualType, &actualFormat, &nitems, &bytesAfter, &prop) == Success) {
+            if (actualType == utf8String && actualFormat == 8 && nitems > 0) {
+                title = QString::fromUtf8((char *)prop, nitems);
+            }
+            if (prop) XFree(prop);
+        }
+        
+        // Method 2: Try WM_NAME (legacy)
+        if (title.isEmpty()) {
+            char *name = NULL;
+            if (XFetchName(xdisplay, win, &name) != 0 && name != NULL) {
+                title = QString::fromLocal8Bit(name);
+                XFree(name);
+            }
+        }
+        
+        // Method 3: Try _NET_WM_VISIBLE_NAME
+        if (title.isEmpty()) {
+            Atom netWmVisibleName = XInternAtom(xdisplay, "_NET_WM_VISIBLE_NAME", False);
+            if (XGetWindowProperty(xdisplay, win, netWmVisibleName, 0, 1024, False, utf8String,
+                                  &actualType, &actualFormat, &nitems, &bytesAfter, &prop) == Success) {
+                if (actualType == utf8String && actualFormat == 8 && nitems > 0) {
+                    title = QString::fromUtf8((char *)prop, nitems);
+                }
+                if (prop) XFree(prop);
+            }
+        }
+        
+        return title.trimmed();
+    }
+
     void populateWindows() {
         if (!xdisplay) return;
 
+        QMap<QString, QString> windows; // title -> windowId
+        
         Window root = DefaultRootWindow(xdisplay);
         
-        // Get the list of window IDs using _NET_CLIENT_LIST
+        // Method 1: _NET_CLIENT_LIST (most window managers)
         Atom netClientList = XInternAtom(xdisplay, "_NET_CLIENT_LIST", False);
         Atom actualType;
         int actualFormat;
@@ -117,107 +194,27 @@ private:
         unsigned char *clientListProp = NULL;
 
         if (XGetWindowProperty(xdisplay, root, netClientList, 0, 1024, False, XA_WINDOW,
-                            &actualType, &actualFormat, &nitems, &bytesAfter, &clientListProp) == Success) {
+                              &actualType, &actualFormat, &nitems, &bytesAfter, &clientListProp) == Success) {
             
             if (actualType == XA_WINDOW && actualFormat == 32 && nitems > 0) {
-                Window *windows = (Window *)clientListProp;
+                Window *windowList = (Window *)clientListProp;
                 
                 for (unsigned long i = 0; i < nitems; i++) {
-                    Window win = windows[i];
-                    
+                    Window win = windowList[i];
                     if (win == None) continue;
-
-                    // Skip invalid windows
-                    XWindowAttributes attrs;
-                    if (!XGetWindowAttributes(xdisplay, win, &attrs)) {
-                        continue; // Window doesn't exist or we can't access it
-                    }
-
-                    // Skip if window is not viewable
-                    if (attrs.map_state != IsViewable) {
-                        continue;
-                    }
-
-                    QString title;
-                    bool titleFound = false;
-
-                    // First try _NET_WM_NAME for UTF-8 support (most modern apps)
-                    Atom netWmName = XInternAtom(xdisplay, "_NET_WM_NAME", False);
-                    Atom utf8String = XInternAtom(xdisplay, "UTF8_STRING", False);
                     
-                    unsigned char *wmNameProp = NULL;
-                    if (XGetWindowProperty(xdisplay, win, netWmName, 0, 1024, False, utf8String,
-                                        &actualType, &actualFormat, &nitems, &bytesAfter, &wmNameProp) == Success) {
-                        
-                        if (actualType == utf8String && actualFormat == 8 && nitems > 0) {
-                            title = QString::fromUtf8((char *)wmNameProp, nitems);
-                            titleFound = true;
-                        }
-                        if (wmNameProp) XFree(wmNameProp);
-                    }
-
-                    // If no UTF-8 title, try WM_NAME (legacy)
-                    if (!titleFound) {
-                        char *name = NULL;
-                        if (XFetchName(xdisplay, win, &name) != 0 && name != NULL) {
-                            title = QString::fromLocal8Bit(name);
-                            if (!title.isEmpty()) {
-                                titleFound = true;
-                            }
-                            XFree(name);
-                        }
-                    }
-
-                    // Skip windows with no title or certain system windows
-                    if (!titleFound || title.isEmpty() || 
-                        title == "Desktop" || title == "Xfdesktop" || 
-                        title.startsWith("xfdesktop") || title == "gnome-shell") {
-                        continue;
-                    }
-
-                    // Get window class for additional filtering if needed
-                    XClassHint classHint;
-                    QString windowClass;
-                    if (XGetClassHint(xdisplay, win, &classHint)) {
-                        if (classHint.res_name) {
-                            windowClass = QString::fromLocal8Bit(classHint.res_name);
-                        }
-                        XFree(classHint.res_name);
-                        XFree(classHint.res_class);
-                    }
-
-                    // Skip some common desktop/window manager windows
-                    if (windowClass.contains("desktop") || windowClass.contains("panel") || 
-                        windowClass.contains("tray") || windowClass.contains("dock")) {
-                        continue;
-                    }
-
-                    QString windowIdStr = QString::number(win, 16);
-                    
-                    // Check if we already added this window
-                    bool found = false;
-                    for (int j = 0; j < windowCombo->count(); j++) {
-                        if (windowCombo->itemData(j).toString() == windowIdStr) {
-                            found = true;
-                            break;
-                        }
-                    }
-                    
-                    if (!found) {
-                        // Add window class to title for better identification
-                        QString displayText = title;
-                        if (!windowClass.isEmpty()) {
-                            displayText += " [" + windowClass + "]";
-                        }
-                        windowCombo->addItem(displayText, windowIdStr);
+                    QString title = getWindowTitle(win);
+                    if (!title.isEmpty() && !isSystemWindow(title, win)) {
+                        QString windowIdStr = QString::number(win, 16);
+                        windows[title] = windowIdStr;
                     }
                 }
             }
             if (clientListProp) XFree(clientListProp);
         }
         
-        // Alternative method: try children of root window
-        if (windowCombo->count() == 0) {
+        // Method 2: XQueryTree (fallback - finds all child windows)
+        if (windows.isEmpty()) {
             Window root_return, parent_return;
             Window *children = NULL;
             unsigned int nchildren;
@@ -225,43 +222,107 @@ private:
             if (XQueryTree(xdisplay, root, &root_return, &parent_return, &children, &nchildren)) {
                 for (unsigned int i = 0; i < nchildren; i++) {
                     Window win = children[i];
-                    
                     if (win == None) continue;
-
+                    
+                    // Basic window attribute check
                     XWindowAttributes attrs;
-                    if (!XGetWindowAttributes(xdisplay, win, &attrs)) {
-                        continue;
-                    }
-
-                    // Skip if window is not viewable or override_redirect (like menus)
-                    if (attrs.map_state != IsViewable || attrs.override_redirect) {
-                        continue;
-                    }
-
-                    char *name = NULL;
-                    if (XFetchName(xdisplay, win, &name) != 0 && name != NULL) {
-                        QString title = QString::fromLocal8Bit(name);
-                        if (!title.isEmpty() && title != "Desktop") {
-                            QString windowIdStr = QString::number(win, 16);
-                            windowCombo->addItem(title, windowIdStr);
-                        }
-                        XFree(name);
+                    if (!XGetWindowAttributes(xdisplay, win, &attrs)) continue;
+                    
+                    // Skip invisible and override_redirect windows (usually menus/tooltips)
+                    if (attrs.map_state != IsViewable || attrs.override_redirect) continue;
+                    
+                    QString title = getWindowTitle(win);
+                    if (!title.isEmpty() && !isSystemWindow(title, win)) {
+                        QString windowIdStr = QString::number(win, 16);
+                        windows[title] = windowIdStr;
                     }
                 }
                 if (children) XFree(children);
             }
         }
         
+        // Method 3: Try _NET_CLIENT_LIST_STACKING (alternative property)
+        Atom netClientListStacking = XInternAtom(xdisplay, "_NET_CLIENT_LIST_STACKING", False);
+        if (XGetWindowProperty(xdisplay, root, netClientListStacking, 0, 1024, False, XA_WINDOW,
+                              &actualType, &actualFormat, &nitems, &bytesAfter, &clientListProp) == Success) {
+            
+            if (actualType == XA_WINDOW && actualFormat == 32 && nitems > 0) {
+                Window *windowList = (Window *)clientListProp;
+                
+                for (unsigned long i = 0; i < nitems; i++) {
+                    Window win = windowList[i];
+                    if (win == None) continue;
+                    
+                    QString title = getWindowTitle(win);
+                    if (!title.isEmpty() && !isSystemWindow(title, win)) {
+                        QString windowIdStr = QString::number(win, 16);
+                        windows[title] = windowIdStr;
+                    }
+                }
+            }
+            if (clientListProp) XFree(clientListProp);
+        }
+        
+        // Add windows to combo box
+        for (auto it = windows.begin(); it != windows.end(); ++it) {
+            windowCombo->addItem(it.key(), it.value());
+        }
+        
         if (windowCombo->count() == 0) {
-            windowCombo->addItem("No windows found - try running as root");
+            windowCombo->addItem("No windows found - Click Refresh");
         }
     }
+
+    bool isSystemWindow(const QString& title, Window win) {
+        if (title.isEmpty()) return true;
+        
+        // Common system window titles/classes to skip
+        QStringList systemTitles = {
+            "Desktop", "Xfdesktop", "xfdesktop", "gnome-shell", "plasmashell",
+            "kicker", "panel", "tray", "dock", "launcher", "notify-osd",
+            "xfce4-panel", "plasma-desktop", "cairo-dock"
+        };
+        
+        for (const QString& systemTitle : systemTitles) {
+            if (title.contains(systemTitle, Qt::CaseInsensitive)) {
+                return true;
+            }
+        }
+        
+        // Check window class
+        XClassHint classHint;
+        if (XGetClassHint(xdisplay, win, &classHint)) {
+            QString resName = classHint.res_name ? QString::fromLocal8Bit(classHint.res_name) : "";
+            QString resClass = classHint.res_class ? QString::fromLocal8Bit(classHint.res_class) : "";
+            
+            QStringList systemClasses = {
+                "xfdesktop", "gnome-shell", "plasmashell", "kicker", "xfce4-panel",
+                "plasma-desktop", "cairo-dock", "docky", "avant-window-navigator"
+            };
+            
+            for (const QString& systemClass : systemClasses) {
+                if (resName.contains(systemClass, Qt::CaseInsensitive) || 
+                    resClass.contains(systemClass, Qt::CaseInsensitive)) {
+                    XFree(classHint.res_name);
+                    XFree(classHint.res_class);
+                    return true;
+                }
+            }
+            
+            XFree(classHint.res_name);
+            XFree(classHint.res_class);
+        }
+        
+        return false;
+    }
+
     void populateKeyboards() {
+        keyboardCombo->clear();
         QDir devDir("/dev/input/by-id");
         QFileInfoList devices = devDir.entryInfoList(QDir::Files);
         
         foreach (const QFileInfo &device, devices) {
-            if (device.fileName().contains("kbd")) {
+            if (device.fileName().contains("kbd") || device.fileName().contains("keyboard")) {
                 keyboardCombo->addItem(device.fileName());
             }
         }
@@ -273,9 +334,9 @@ private:
 
     QComboBox *windowCombo;
     QComboBox *keyboardCombo;
+    QLabel *statusLabel;
     Display* xdisplay = nullptr;
 };
-
 class ControlPanel : public QMainWindow {
     Q_OBJECT
 
