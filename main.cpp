@@ -109,7 +109,7 @@ private:
 
         Window root = DefaultRootWindow(xdisplay);
         
-        // Get the list of window IDs
+        // Get the list of window IDs using _NET_CLIENT_LIST
         Atom netClientList = XInternAtom(xdisplay, "_NET_CLIENT_LIST", False);
         Atom actualType;
         int actualFormat;
@@ -117,7 +117,7 @@ private:
         unsigned char *clientListProp = NULL;
 
         if (XGetWindowProperty(xdisplay, root, netClientList, 0, 1024, False, XA_WINDOW,
-                              &actualType, &actualFormat, &nitems, &bytesAfter, &clientListProp) == Success) {
+                            &actualType, &actualFormat, &nitems, &bytesAfter, &clientListProp) == Success) {
             
             if (actualType == XA_WINDOW && actualFormat == 32 && nitems > 0) {
                 Window *windows = (Window *)clientListProp;
@@ -125,55 +125,137 @@ private:
                 for (unsigned long i = 0; i < nitems; i++) {
                     Window win = windows[i];
                     
-                    // Get window name
-                    char *name = NULL;
-                    if (XFetchName(xdisplay, win, &name) != 0 && name != NULL) {
-                        QString title = QString::fromUtf8(name);
-                        if (!title.isEmpty()) {
-                            QString windowIdStr = QString::number(win, 16);
-                            windowCombo->addItem(title, windowIdStr);
-                        }
-                        XFree(name);
-                        name = NULL;
+                    if (win == None) continue;
+
+                    // Skip invalid windows
+                    XWindowAttributes attrs;
+                    if (!XGetWindowAttributes(xdisplay, win, &attrs)) {
+                        continue; // Window doesn't exist or we can't access it
                     }
-                    
-                    // Also try _NET_WM_NAME for UTF-8 support
+
+                    // Skip if window is not viewable
+                    if (attrs.map_state != IsViewable) {
+                        continue;
+                    }
+
+                    QString title;
+                    bool titleFound = false;
+
+                    // First try _NET_WM_NAME for UTF-8 support (most modern apps)
                     Atom netWmName = XInternAtom(xdisplay, "_NET_WM_NAME", False);
                     Atom utf8String = XInternAtom(xdisplay, "UTF8_STRING", False);
                     
                     unsigned char *wmNameProp = NULL;
                     if (XGetWindowProperty(xdisplay, win, netWmName, 0, 1024, False, utf8String,
-                                          &actualType, &actualFormat, &nitems, &bytesAfter, &wmNameProp) == Success) {
+                                        &actualType, &actualFormat, &nitems, &bytesAfter, &wmNameProp) == Success) {
                         
                         if (actualType == utf8String && actualFormat == 8 && nitems > 0) {
-                            QString title = QString::fromUtf8((char *)wmNameProp, nitems);
-                            if (!title.isEmpty()) {
-                                QString windowIdStr = QString::number(win, 16);
-                                // Check if we already added this window
-                                bool found = false;
-                                for (int j = 0; j < windowCombo->count(); j++) {
-                                    if (windowCombo->itemData(j).toString() == windowIdStr) {
-                                        found = true;
-                                        break;
-                                    }
-                                }
-                                if (!found) {
-                                    windowCombo->addItem(title, windowIdStr);
-                                }
-                            }
+                            title = QString::fromUtf8((char *)wmNameProp, nitems);
+                            titleFound = true;
                         }
                         if (wmNameProp) XFree(wmNameProp);
+                    }
+
+                    // If no UTF-8 title, try WM_NAME (legacy)
+                    if (!titleFound) {
+                        char *name = NULL;
+                        if (XFetchName(xdisplay, win, &name) != 0 && name != NULL) {
+                            title = QString::fromLocal8Bit(name);
+                            if (!title.isEmpty()) {
+                                titleFound = true;
+                            }
+                            XFree(name);
+                        }
+                    }
+
+                    // Skip windows with no title or certain system windows
+                    if (!titleFound || title.isEmpty() || 
+                        title == "Desktop" || title == "Xfdesktop" || 
+                        title.startsWith("xfdesktop") || title == "gnome-shell") {
+                        continue;
+                    }
+
+                    // Get window class for additional filtering if needed
+                    XClassHint classHint;
+                    QString windowClass;
+                    if (XGetClassHint(xdisplay, win, &classHint)) {
+                        if (classHint.res_name) {
+                            windowClass = QString::fromLocal8Bit(classHint.res_name);
+                        }
+                        XFree(classHint.res_name);
+                        XFree(classHint.res_class);
+                    }
+
+                    // Skip some common desktop/window manager windows
+                    if (windowClass.contains("desktop") || windowClass.contains("panel") || 
+                        windowClass.contains("tray") || windowClass.contains("dock")) {
+                        continue;
+                    }
+
+                    QString windowIdStr = QString::number(win, 16);
+                    
+                    // Check if we already added this window
+                    bool found = false;
+                    for (int j = 0; j < windowCombo->count(); j++) {
+                        if (windowCombo->itemData(j).toString() == windowIdStr) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!found) {
+                        // Add window class to title for better identification
+                        QString displayText = title;
+                        if (!windowClass.isEmpty()) {
+                            displayText += " [" + windowClass + "]";
+                        }
+                        windowCombo->addItem(displayText, windowIdStr);
                     }
                 }
             }
             if (clientListProp) XFree(clientListProp);
         }
         
+        // Alternative method: try children of root window
         if (windowCombo->count() == 0) {
-            windowCombo->addItem("No windows found");
+            Window root_return, parent_return;
+            Window *children = NULL;
+            unsigned int nchildren;
+            
+            if (XQueryTree(xdisplay, root, &root_return, &parent_return, &children, &nchildren)) {
+                for (unsigned int i = 0; i < nchildren; i++) {
+                    Window win = children[i];
+                    
+                    if (win == None) continue;
+
+                    XWindowAttributes attrs;
+                    if (!XGetWindowAttributes(xdisplay, win, &attrs)) {
+                        continue;
+                    }
+
+                    // Skip if window is not viewable or override_redirect (like menus)
+                    if (attrs.map_state != IsViewable || attrs.override_redirect) {
+                        continue;
+                    }
+
+                    char *name = NULL;
+                    if (XFetchName(xdisplay, win, &name) != 0 && name != NULL) {
+                        QString title = QString::fromLocal8Bit(name);
+                        if (!title.isEmpty() && title != "Desktop") {
+                            QString windowIdStr = QString::number(win, 16);
+                            windowCombo->addItem(title, windowIdStr);
+                        }
+                        XFree(name);
+                    }
+                }
+                if (children) XFree(children);
+            }
+        }
+        
+        if (windowCombo->count() == 0) {
+            windowCombo->addItem("No windows found - try running as root");
         }
     }
-
     void populateKeyboards() {
         QDir devDir("/dev/input/by-id");
         QFileInfoList devices = devDir.entryInfoList(QDir::Files);
@@ -233,7 +315,7 @@ public:
         
         // Set window to always be on top of all other windows
         setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
-        setFixedSize(160, 120);
+        setFixedSize(220, 180);
         
         // Ensure the window is visible and raised to top
         raise();
@@ -260,61 +342,170 @@ public:
 private slots:
     void onToggle1Clicked() {
         QPoint originalMousePos = QCursor::pos();
+        // Move mouse away before focusing window
+        moveMouseAway();
         focusSelectedWindow();
         toggle1State = !toggle1State;
         updateButtonAppearance(btnToggle1, toggle1State);
         sendKeyEvent(KEY_LEFTSHIFT, toggle1State ? 1 : 0);
-        QTimer::singleShot(100, this, [this, originalMousePos]() {
-            returnMouseToPosition(originalMousePos);
-        });
+        // Don't return mouse for toggle buttons
     }
 
     void onToggle2Clicked() {
         QPoint originalMousePos = QCursor::pos();
+        // Move mouse away before focusing window
+        moveMouseAway();
         focusSelectedWindow();
         toggle2State = !toggle2State;
         updateButtonAppearance(btnToggle2, toggle2State);
         sendKeyEvent(KEY_LEFTCTRL, toggle2State ? 1 : 0);
-        QTimer::singleShot(100, this, [this, originalMousePos]() {
-            returnMouseToPosition(originalMousePos);
-        });
+        // Don't return mouse for toggle buttons
     }
 
     void onToggle3Clicked() {
         QPoint originalMousePos = QCursor::pos();
+        // Move mouse away before focusing window
+        moveMouseAway();
         focusSelectedWindow();
         toggle3State = !toggle3State;
         updateButtonAppearance(btnToggle3, toggle3State);
         sendKeyEvent(KEY_LEFTALT, toggle3State ? 1 : 0);
-        QTimer::singleShot(100, this, [this, originalMousePos]() {
-            returnMouseToPosition(originalMousePos);
-        });
+        // Don't return mouse for toggle buttons
     }
 
     void onAction4Clicked() {
         QPoint originalMousePos = QCursor::pos();
-        // For Blender, we need to ensure the 3D view is active
+        // Move mouse away before focusing window
+        moveMouseAway();
         focusSelectedWindow();
         
-        // Additional steps for Blender: send a harmless key to activate the 3D view
         QTimer::singleShot(150, this, [this, originalMousePos]() {
-            // Send a harmless key like ESC first to ensure Blender's 3D view gets focus
             sendKeyEvent(KEY_ESC, 1);
             QTimer::singleShot(50, this, [this, originalMousePos]() { 
                 sendKeyEvent(KEY_ESC, 0);
                 
-                // Then send the actual numpad plus after another delay
                 QTimer::singleShot(100, this, [this, originalMousePos]() {
                     sendKeyEvent(KEY_KPPLUS, 1);
                     QTimer::singleShot(50, this, [this, originalMousePos]() { 
                         sendKeyEvent(KEY_KPPLUS, 0);
-                        // Return mouse to original position after all operations
+                        // Only return mouse for kp_plus
                         returnMouseToPosition(originalMousePos);
                     });
                 });
             });
         });
     }
+
+    void onTabClicked() {
+        QPoint originalMousePos = QCursor::pos();
+        // Move mouse away before focusing window
+        moveMouseAway();
+        focusSelectedWindow();
+        
+        QTimer::singleShot(100, this, [this]() {
+            // Send Tab key first
+            sendKeyEvent(KEY_TAB, 1);
+            QTimer::singleShot(50, this, [this]() { 
+                sendKeyEvent(KEY_TAB, 0);
+                
+                // Then turn off all modifiers after sending Tab
+                QTimer::singleShot(50, this, [this]() {
+                    if (toggle1State) {
+                        sendKeyEvent(KEY_LEFTSHIFT, 0);
+                        toggle1State = false;
+                        updateButtonAppearance(btnToggle1, false);
+                    }
+                    if (toggle2State) {
+                        sendKeyEvent(KEY_LEFTCTRL, 0);
+                        toggle2State = false;
+                        updateButtonAppearance(btnToggle2, false);
+                    }
+                    if (toggle3State) {
+                        sendKeyEvent(KEY_LEFTALT, 0);
+                        toggle3State = false;
+                        updateButtonAppearance(btnToggle3, false);
+                    }
+                });
+            });
+        });
+    }
+
+    void onDelClicked() {
+        QPoint originalMousePos = QCursor::pos();
+        // Move mouse away before focusing window
+        moveMouseAway();
+        focusSelectedWindow();
+        
+        QTimer::singleShot(100, this, [this]() {
+            // Send Del key first
+            sendKeyEvent(KEY_DELETE, 1);
+            QTimer::singleShot(50, this, [this]() { 
+                sendKeyEvent(KEY_DELETE, 0);
+                
+                // Then turn off all modifiers after sending Del
+                QTimer::singleShot(50, this, [this]() {
+                    if (toggle1State) {
+                        sendKeyEvent(KEY_LEFTSHIFT, 0);
+                        toggle1State = false;
+                        updateButtonAppearance(btnToggle1, false);
+                    }
+                    if (toggle2State) {
+                        sendKeyEvent(KEY_LEFTCTRL, 0);
+                        toggle2State = false;
+                        updateButtonAppearance(btnToggle2, false);
+                    }
+                    if (toggle3State) {
+                        sendKeyEvent(KEY_LEFTALT, 0);
+                        toggle3State = false;
+                        updateButtonAppearance(btnToggle3, false);
+                    }
+                });
+            });
+        });
+    }
+
+    void onKeyClicked(int keyCode, const QString& keyName) {
+        QPoint originalMousePos = QCursor::pos();
+        // Move mouse away before focusing window
+        moveMouseAway();
+        focusSelectedWindow();
+        
+        QTimer::singleShot(100, this, [this, keyCode]() {
+            // Send key first
+            sendKeyEvent(keyCode, 1);
+            QTimer::singleShot(50, this, [this, keyCode]() { 
+                sendKeyEvent(keyCode, 0);
+                
+                // Then turn off all modifiers after sending key
+                QTimer::singleShot(50, this, [this]() {
+                    if (toggle1State) {
+                        sendKeyEvent(KEY_LEFTSHIFT, 0);
+                        toggle1State = false;
+                        updateButtonAppearance(btnToggle1, false);
+                    }
+                    if (toggle2State) {
+                        sendKeyEvent(KEY_LEFTCTRL, 0);
+                        toggle2State = false;
+                        updateButtonAppearance(btnToggle2, false);
+                    }
+                    if (toggle3State) {
+                        sendKeyEvent(KEY_LEFTALT, 0);
+                        toggle3State = false;
+                        updateButtonAppearance(btnToggle3, false);
+                    }
+                });
+            });
+        });
+    }
+
+    void onGClicked() { onKeyClicked(KEY_G, "G"); }
+    void onEClicked() { onKeyClicked(KEY_E, "E"); }
+    void onSClicked() { onKeyClicked(KEY_S, "S"); }
+    void onXClicked() { onKeyClicked(KEY_X, "X"); }
+    void onYClicked() { onKeyClicked(KEY_Y, "Y"); }
+    void onZClicked() { onKeyClicked(KEY_Z, "Z"); }
+    void onFClicked() { onKeyClicked(KEY_F, "F"); }
+    void onBClicked() { onKeyClicked(KEY_B, "B"); }
 
     void onCloseClicked() {
         close();
@@ -327,26 +518,52 @@ private:
         gridLayout->setSpacing(2);
         gridLayout->setContentsMargins(4, 4, 4, 4);
 
-        // First row: Toggle buttons + Close
+        // First row: Shift, Ctrl, Alt, Close
         btnToggle1 = createLargeButton("Shift", 36);
         btnToggle2 = createLargeButton("Ctrl", 36);
+        btnToggle3 = createLargeButton("Alt", 36);
         QPushButton *closeButton = createLargeButton("×", 36);
         closeButton->setStyleSheet("QPushButton { background-color: #ff4444; color: white; border: 1px solid #ff6666; font-size: 16px; } QPushButton:hover { background-color: #ff6666; }");
 
         gridLayout->addWidget(btnToggle1, 0, 0);
         gridLayout->addWidget(btnToggle2, 0, 1);
-        gridLayout->addWidget(closeButton, 0, 2);
+        gridLayout->addWidget(btnToggle3, 0, 2);
+        gridLayout->addWidget(closeButton, 0, 3);
 
-        // Second row: Toggle button + Action button + Drag handle
-        btnToggle3 = createLargeButton("Alt", 36);
-        QPushButton *btnAction4 = createLargeButton("+", 36);
+        // Second row: X, Y, Z, Drag handle
+        QPushButton *btnX = createLargeButton("X", 36);
+        QPushButton *btnY = createLargeButton("Y", 36);
+        QPushButton *btnZ = createLargeButton("Z", 36);
         dragButton = createLargeButton("≡", 36);
         dragButton->setStyleSheet("QPushButton { background-color: #333333; color: white; border: 1px solid #555555; font-size: 20px; } QPushButton:hover { background-color: #444444; }");
         dragButton->setCursor(Qt::SizeAllCursor);
 
-        gridLayout->addWidget(btnToggle3, 1, 0);
-        gridLayout->addWidget(btnAction4, 1, 1);
-        gridLayout->addWidget(dragButton, 1, 2);
+        gridLayout->addWidget(btnX, 1, 0);
+        gridLayout->addWidget(btnY, 1, 1);
+        gridLayout->addWidget(btnZ, 1, 2);
+        gridLayout->addWidget(dragButton, 1, 3);
+
+        // Third row: G, S, E, F
+        QPushButton *btnG = createLargeButton("G", 36);
+        QPushButton *btnS = createLargeButton("S", 36);
+        QPushButton *btnE = createLargeButton("E", 36);
+        QPushButton *btnF = createLargeButton("F", 36);
+
+        gridLayout->addWidget(btnG, 2, 0);
+        gridLayout->addWidget(btnS, 2, 1);
+        gridLayout->addWidget(btnE, 2, 2);
+        gridLayout->addWidget(btnF, 2, 3);
+
+        // Fourth row: B, Tab, Del, Plus
+        QPushButton *btnB = createLargeButton("B", 36);
+        QPushButton *btnTab = createLargeButton("Tab", 36);
+        QPushButton *btnDel = createLargeButton("Del", 36);
+        QPushButton *btnAction4 = createLargeButton("+", 36);
+
+        gridLayout->addWidget(btnB, 3, 0);
+        gridLayout->addWidget(btnTab, 3, 1);
+        gridLayout->addWidget(btnDel, 3, 2);
+        gridLayout->addWidget(btnAction4, 3, 3);
 
         setCentralWidget(centralWidget);
 
@@ -355,6 +572,16 @@ private:
         connect(btnToggle2, &QPushButton::clicked, this, &ControlPanel::onToggle2Clicked);
         connect(btnToggle3, &QPushButton::clicked, this, &ControlPanel::onToggle3Clicked);
         connect(btnAction4, &QPushButton::clicked, this, &ControlPanel::onAction4Clicked);
+        connect(btnTab, &QPushButton::clicked, this, &ControlPanel::onTabClicked);
+        connect(btnDel, &QPushButton::clicked, this, &ControlPanel::onDelClicked);
+        connect(btnG, &QPushButton::clicked, this, &ControlPanel::onGClicked);
+        connect(btnE, &QPushButton::clicked, this, &ControlPanel::onEClicked);
+        connect(btnS, &QPushButton::clicked, this, &ControlPanel::onSClicked);
+        connect(btnX, &QPushButton::clicked, this, &ControlPanel::onXClicked);
+        connect(btnY, &QPushButton::clicked, this, &ControlPanel::onYClicked);
+        connect(btnZ, &QPushButton::clicked, this, &ControlPanel::onZClicked);
+        connect(btnF, &QPushButton::clicked, this, &ControlPanel::onFClicked);
+        connect(btnB, &QPushButton::clicked, this, &ControlPanel::onBClicked);
         connect(closeButton, &QPushButton::clicked, this, &ControlPanel::onCloseClicked);
 
         // Initial button states
@@ -428,6 +655,16 @@ private:
         button->setStyleSheet(style);
     }
 
+    void moveMouseAway() {
+        // Move mouse to center of screen
+        QScreen *screen = QGuiApplication::primaryScreen();
+        if (!screen) return;
+        QRect screenGeometry = screen->geometry();
+        QPoint center = screenGeometry.center();
+        QCursor::setPos(center);
+        qDebug() << "Mouse moved away to safe position";
+    }
+    
     void returnMouseToPosition(const QPoint &position) {
         QCursor::setPos(position);
         qDebug() << "Mouse returned to position:" << position;
@@ -435,21 +672,14 @@ private:
 
     void focusSelectedWindow() {
         if (!selectedWindowId.isEmpty() && xdisplay) {
-            // Convert window ID from hex string to Window
             bool ok;
             Window windowId = selectedWindowId.toULong(&ok, 16);
             if (ok) {
                 qDebug() << "Focusing Blender window:" << selectedWindowId << "(" << windowId << ")";
                 
-                // More aggressive focus method for Blender
-                
-                // 1. Raise the window first
                 XRaiseWindow(xdisplay, windowId);
-                
-                // 2. Set input focus
                 XSetInputFocus(xdisplay, windowId, RevertToParent, CurrentTime);
                 
-                // 3. Use NETWM protocol to activate the window
                 Atom netActiveWindow = XInternAtom(xdisplay, "_NET_ACTIVE_WINDOW", False);
                 if (netActiveWindow != None) {
                     XEvent event;
@@ -461,7 +691,7 @@ private:
                     event.xclient.window = windowId;
                     event.xclient.message_type = netActiveWindow;
                     event.xclient.format = 32;
-                    event.xclient.data.l[0] = 1; // Source indication (1 = application)
+                    event.xclient.data.l[0] = 1;
                     event.xclient.data.l[1] = CurrentTime;
                     event.xclient.data.l[2] = 0;
                     event.xclient.data.l[3] = 0;
@@ -472,7 +702,6 @@ private:
                 }
                 
                 XFlush(xdisplay);
-                
                 qDebug() << "Blender window focus completed";
             }
         }
@@ -481,7 +710,6 @@ private:
     int openKeyboardDevice(const QString &deviceName) {
         QString symlinkPath = "/dev/input/by-id/" + deviceName;
         
-        // Use realpath to resolve the symlink to absolute path
         char resolvedPath[PATH_MAX];
         if (realpath(symlinkPath.toUtf8().constData(), resolvedPath) == NULL) {
             qWarning() << "Failed to resolve symlink:" << symlinkPath << "Error:" << strerror(errno);
@@ -509,23 +737,19 @@ private:
         struct input_event ev;
         memset(&ev, 0, sizeof(ev));
         
-        // Get current time
         struct timeval tv;
         gettimeofday(&tv, NULL);
         ev.time = tv;
         
-        // Set up key event
         ev.type = EV_KEY;
         ev.code = keyCode;
         ev.value = value;
         
-        // Write key event
         if (::write(keyboardFd, &ev, sizeof(ev)) == -1) {
             qWarning() << "Failed to write key event:" << strerror(errno);
             return;
         }
         
-        // Sync event
         ev.type = EV_SYN;
         ev.code = SYN_REPORT;
         ev.value = 0;
@@ -537,7 +761,6 @@ private:
     }
 
     bool eventFilter(QObject *obj, QEvent *event) override {
-        // Only allow dragging from the drag button, not from modifier key buttons
         if (obj == dragButton) {
             if (event->type() == QEvent::MouseButtonPress) {
                 QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
