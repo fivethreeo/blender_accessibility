@@ -50,10 +50,12 @@ public:
             return QCursor::pos();
         }
 
-        // Count frequency of each position in the queue
+        // Group positions within 25px tolerance and count frequency
         QHash<QPoint, int> frequency;
         for (const QPoint &pos : positionQueue) {
-            frequency[pos]++;
+            // Find existing position within 25px tolerance, or use current position
+            QPoint groupedPos = findGroupedPosition(pos, frequency);
+            frequency[groupedPos]++;
         }
 
         // Find the most frequent position
@@ -66,7 +68,7 @@ public:
             }
         }
 
-        qDebug() << "Most frequent mouse position in last second:" << mostFrequent << "count:" << maxCount << "total samples:" << positionQueue.size();
+        qDebug() << "Most frequent mouse position (25px fuzzy, 3s window):" << mostFrequent << "count:" << maxCount << "total samples:" << positionQueue.size();
         return mostFrequent;
     }
 
@@ -74,17 +76,34 @@ private slots:
     void recordMousePosition() {
         QPoint currentPos = QCursor::pos();
         
-        positionQueue.enqueue(currentPos);
 
-        // Keep only last 3 second of data (20 samples at 50ms interval)
+            positionQueue.enqueue(currentPos);
+
+        // Keep last 3 seconds of data (60 samples at 50ms interval)
         while (positionQueue.size() > 60) {
             positionQueue.dequeue();
         }
     }
 
 private:
+    QPoint findGroupedPosition(const QPoint &pos, const QHash<QPoint, int> &frequency) {
+        const int tolerance = 25; // 25px fuzzy tolerance
+        
+        // Look for existing position within tolerance
+        for (auto it = frequency.begin(); it != frequency.end(); ++it) {
+            const QPoint &existingPos = it.key();
+            if (abs(pos.x() - existingPos.x()) <= tolerance && 
+                abs(pos.y() - existingPos.y()) <= tolerance) {
+                return existingPos; // Return the existing grouped position
+            }
+        }
+        
+        // No existing position within tolerance, return the original position
+        return pos;
+    }
+
     QTimer *monitorTimer;
-    QQueue<QPoint> positionQueue; // FIFO queue for last 1 second of positions
+    QQueue<QPoint> positionQueue; // FIFO queue for last 3 seconds of positions
 };
 
 class SetupDialog : public QDialog {
