@@ -20,10 +20,14 @@ Status: Working | Qt6 | Platform: Linux
 ## Screenshots
 
 Collapsed View - Compact interface for daily use  
-See screenshot_collapsed.png
 
-Expanded View - Full numpad for numeric input  
-See screenshot_expanded.png
+![Main Panel (Collapsed)](screenshot_collapsed.png)
+
+Expanded with Numpad screenshot:
+
+Expanded View - Full numpad for numeric input 
+
+![Main Panel (Expanded)](screenshot_expanded.png)
 
 ## Installation
 
@@ -77,17 +81,7 @@ sudo usermod -a -G input $USER
    - Select your keyboard device from the list  
    - Click "Start Control"
 
-3. Control Panel Layout:
-
-Main Panel (Collapsed) screenshot:
-
-![Main Panel (Collapsed)](screenshot_collapsed.png)
-
-Expanded with Numpad screenshot:
-
-![Main Panel (Expanded)](screenshot_expanded.png)
-
-4. Button Functions:
+3. Button Functions:
 
 Button       Function              Behavior
 Shift/Ctrl/Alt Three-state toggle  Off -> Active (Green) -> Locked (Red) -> Off
@@ -98,12 +92,12 @@ B, Tab, Del  Box Select, Mode     Selection and editing
 ×            Close Application    Exit ControlPanel
 ≡            Drag Panel           Reposition control panel
 
-5. Modifier Key Behavior:
+4. Modifier Key Behavior:
    - First Click: Activates modifier (green) - turns off with other keys
    - Second Click: Locks modifier (red) - stays active permanently
    - Third Click: Turns off modifier
 
-6. Smart Mouse Features:
+5. Smart Mouse Features:
    - Tracks mouse position for 3 seconds with 25px fuzzy tolerance
    - Moves to your most frequent work area when buttons are clicked
    - Numpad keys return mouse to original position
