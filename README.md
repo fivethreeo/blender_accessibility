@@ -23,8 +23,6 @@ Collapsed View - Compact interface for daily use
 
 ![Main Panel (Collapsed)](screenshot_collapsed.png)
 
-Expanded with Numpad screenshot:
-
 Expanded View - Full numpad for numeric input 
 
 ![Main Panel (Expanded)](screenshot_expanded.png)
