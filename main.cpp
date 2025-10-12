@@ -411,6 +411,7 @@ private:
     QLabel *statusLabel;
     Display* xdisplay = nullptr;
 };
+
 class ControlPanel : public QMainWindow {
     Q_OBJECT
 
@@ -477,33 +478,83 @@ public:
         activateWindow();
     }
 
+    void turnOffNonLockedModifiers() {
+        if (toggle1State && !toggle1Locked) {
+            sendKeyEvent(KEY_LEFTSHIFT, 0);
+            toggle1State = false;
+            updateButtonAppearance(btnToggle1, false, false);
+        }
+        if (toggle2State && !toggle2Locked) {
+            sendKeyEvent(KEY_LEFTCTRL, 0);
+            toggle2State = false;
+            updateButtonAppearance(btnToggle2, false, false);
+        }
+        if (toggle3State && !toggle3Locked) {
+            sendKeyEvent(KEY_LEFTALT, 0);
+            toggle3State = false;
+            updateButtonAppearance(btnToggle3, false, false);
+        }
+    }
+
 private slots:
     void onToggle1Clicked() {
-        QPoint originalMousePos = QCursor::pos();
-        toggle1State = !toggle1State;
-        updateButtonAppearance(btnToggle1, toggle1State);
+        // Toggle between off -> on -> locked -> off
+        if (!toggle1State && !toggle1Locked) {
+            // First click: turn on (green)
+            toggle1State = true;
+            toggle1Locked = false;
+        } else if (toggle1State && !toggle1Locked) {
+            // Second click: lock (red)
+            toggle1State = true;
+            toggle1Locked = true;
+        } else {
+            // Third click: turn off
+            toggle1State = false;
+            toggle1Locked = false;
+        }
+        
+        updateButtonAppearance(btnToggle1, toggle1State, toggle1Locked);
         sendKeyEvent(KEY_LEFTSHIFT, toggle1State ? 1 : 0);
-        // Don't return mouse for toggle buttons
     }
 
     void onToggle2Clicked() {
-        QPoint originalMousePos = QCursor::pos();
-        // Move mouse away before focusing window
-
-        toggle2State = !toggle2State;
-        updateButtonAppearance(btnToggle2, toggle2State);
+        // Toggle between off -> on -> locked -> off
+        if (!toggle2State && !toggle2Locked) {
+            // First click: turn on (green)
+            toggle2State = true;
+            toggle2Locked = false;
+        } else if (toggle2State && !toggle2Locked) {
+            // Second click: lock (red)
+            toggle2State = true;
+            toggle2Locked = true;
+        } else {
+            // Third click: turn off
+            toggle2State = false;
+            toggle2Locked = false;
+        }
+        
+        updateButtonAppearance(btnToggle2, toggle2State, toggle2Locked);
         sendKeyEvent(KEY_LEFTCTRL, toggle2State ? 1 : 0);
-        // Don't return mouse for toggle buttons
     }
 
     void onToggle3Clicked() {
-        QPoint originalMousePos = QCursor::pos();
-        // Move mouse away before focusing window
-
-        toggle3State = !toggle3State;
-        updateButtonAppearance(btnToggle3, toggle3State);
+        // Toggle between off -> on -> locked -> off
+        if (!toggle3State && !toggle3Locked) {
+            // First click: turn on (green)
+            toggle3State = true;
+            toggle3Locked = false;
+        } else if (toggle3State && !toggle3Locked) {
+            // Second click: lock (red)
+            toggle3State = true;
+            toggle3Locked = true;
+        } else {
+            // Third click: turn off
+            toggle3State = false;
+            toggle3Locked = false;
+        }
+        
+        updateButtonAppearance(btnToggle3, toggle3State, toggle3Locked);
         sendKeyEvent(KEY_LEFTALT, toggle3State ? 1 : 0);
-        // Don't return mouse for toggle buttons
     }
 
     void onAction4Clicked() {
@@ -543,21 +594,7 @@ private slots:
                 
                 // Then turn off all modifiers after sending Tab
                 QTimer::singleShot(50, this, [this]() {
-                    if (toggle1State) {
-                        sendKeyEvent(KEY_LEFTSHIFT, 0);
-                        toggle1State = false;
-                        updateButtonAppearance(btnToggle1, false);
-                    }
-                    if (toggle2State) {
-                        sendKeyEvent(KEY_LEFTCTRL, 0);
-                        toggle2State = false;
-                        updateButtonAppearance(btnToggle2, false);
-                    }
-                    if (toggle3State) {
-                        sendKeyEvent(KEY_LEFTALT, 0);
-                        toggle3State = false;
-                        updateButtonAppearance(btnToggle3, false);
-                    }
+                    turnOffNonLockedModifiers();
                 });
             });
         });
@@ -577,21 +614,7 @@ private slots:
                 
                 // Then turn off all modifiers after sending Del
                 QTimer::singleShot(50, this, [this]() {
-                    if (toggle1State) {
-                        sendKeyEvent(KEY_LEFTSHIFT, 0);
-                        toggle1State = false;
-                        updateButtonAppearance(btnToggle1, false);
-                    }
-                    if (toggle2State) {
-                        sendKeyEvent(KEY_LEFTCTRL, 0);
-                        toggle2State = false;
-                        updateButtonAppearance(btnToggle2, false);
-                    }
-                    if (toggle3State) {
-                        sendKeyEvent(KEY_LEFTALT, 0);
-                        toggle3State = false;
-                        updateButtonAppearance(btnToggle3, false);
-                    }
+                    turnOffNonLockedModifiers();
                 });
             });
         });
@@ -611,21 +634,7 @@ private slots:
                 
                 // Then turn off all modifiers after sending key
                 QTimer::singleShot(50, this, [this]() {
-                    if (toggle1State) {
-                        sendKeyEvent(KEY_LEFTSHIFT, 0);
-                        toggle1State = false;
-                        updateButtonAppearance(btnToggle1, false);
-                    }
-                    if (toggle2State) {
-                        sendKeyEvent(KEY_LEFTCTRL, 0);
-                        toggle2State = false;
-                        updateButtonAppearance(btnToggle2, false);
-                    }
-                    if (toggle3State) {
-                        sendKeyEvent(KEY_LEFTALT, 0);
-                        toggle3State = false;
-                        updateButtonAppearance(btnToggle3, false);
-                    }
+                    turnOffNonLockedModifiers();
                 });
             });
         });
@@ -644,12 +653,73 @@ private slots:
         close();
     }
 
+    void onNumpadToggleClicked() {
+        // Toggle numpad visibility
+        numpadVisible = !numpadVisible;
+        updateNumpadVisibility();
+        
+        // Update button appearance
+        updateButtonAppearance(btnNumpadToggle, numpadVisible, false);
+        
+        // Resize window based on numpad state
+        if (numpadVisible) {
+            setFixedSize(220 + 210, 180); // Expand width for numpad
+        } else {
+            setFixedSize(220, 180); // Collapse to original size
+        }
+    }
+
+    void onNumpadKeyClicked(int keyCode, const QString& keyName) {
+        QPoint originalMousePos = QCursor::pos();
+        // Move mouse away before focusing window
+        moveMouseAway();
+        focusSelectedWindow();
+        
+        QTimer::singleShot(100, this, [this, keyCode, originalMousePos]() {
+            // Send key first
+            sendKeyEvent(keyCode, 1);
+            QTimer::singleShot(50, this, [this, keyCode, originalMousePos]() { 
+                sendKeyEvent(keyCode, 0);
+                
+                // Then turn off all modifiers after sending key
+                QTimer::singleShot(50, this, [this]() {
+                    turnOffNonLockedModifiers();
+                });
+                
+                // Return mouse for numpad keys
+                returnMouseToPosition(originalMousePos);
+            });
+        });
+    }
+
+    void onNum1Clicked() { onNumpadKeyClicked(KEY_KP1, "1"); }
+    void onNum2Clicked() { onNumpadKeyClicked(KEY_KP2, "2"); }
+    void onNum3Clicked() { onNumpadKeyClicked(KEY_KP3, "3"); }
+    void onNum4Clicked() { onNumpadKeyClicked(KEY_KP4, "4"); }
+    void onNum5Clicked() { onNumpadKeyClicked(KEY_KP5, "5"); }
+    void onNum6Clicked() { onNumpadKeyClicked(KEY_KP6, "6"); }
+    void onNum7Clicked() { onNumpadKeyClicked(KEY_KP7, "7"); }
+    void onNum8Clicked() { onNumpadKeyClicked(KEY_KP8, "8"); }
+    void onNum9Clicked() { onNumpadKeyClicked(KEY_KP9, "9"); }
+    void onNum0Clicked() { onNumpadKeyClicked(KEY_KP0, "0"); }
+    void onNumDivideClicked() { onNumpadKeyClicked(KEY_KPSLASH, "/"); }
+    void onNumMultiplyClicked() { onNumpadKeyClicked(KEY_KPASTERISK, "*"); }
+    void onNumMinusClicked() { onNumpadKeyClicked(KEY_KPMINUS, "-"); }
+    void onNumPlusClicked() { onNumpadKeyClicked(KEY_KPPLUS, "+"); }
+
 private:
+
     void setupUI() {
         QWidget *centralWidget = new QWidget(this);
-        QGridLayout *gridLayout = new QGridLayout(centralWidget);
+        mainLayout = new QHBoxLayout(centralWidget);
+        mainLayout->setSpacing(2);
+        mainLayout->setContentsMargins(4, 4, 4, 4);
+
+        // Create main panel (left side)
+        QWidget *mainPanel = new QWidget();
+        QGridLayout *gridLayout = new QGridLayout(mainPanel);
         gridLayout->setSpacing(2);
-        gridLayout->setContentsMargins(4, 4, 4, 4);
+        gridLayout->setContentsMargins(0, 0, 0, 0);
 
         // First row: Shift, Ctrl, Alt, Close
         btnToggle1 = createLargeButton("Shift", 36);
@@ -687,16 +757,64 @@ private:
         gridLayout->addWidget(btnE, 2, 2);
         gridLayout->addWidget(btnF, 2, 3);
 
-        // Fourth row: B, Tab, Del, Plus
+        // Fourth row: B, Tab, Del, Numpad Toggle
         QPushButton *btnB = createLargeButton("B", 36);
         QPushButton *btnTab = createLargeButton("Tab", 36);
         QPushButton *btnDel = createLargeButton("Del", 36);
-        QPushButton *btnAction4 = createLargeButton("+", 36);
+        btnNumpadToggle = createLargeButton("+", 36);
+        btnNumpadToggle->setStyleSheet("QPushButton { background-color: #4444aa; color: white; border: 1px solid #6666cc; } QPushButton:hover { background-color: #6666cc; }");
 
         gridLayout->addWidget(btnB, 3, 0);
         gridLayout->addWidget(btnTab, 3, 1);
         gridLayout->addWidget(btnDel, 3, 2);
-        gridLayout->addWidget(btnAction4, 3, 3);
+        gridLayout->addWidget(btnNumpadToggle, 3, 3);
+
+        // Create numpad panel (right side, initially hidden)
+        numpadPanel = new QWidget();
+        QGridLayout *numpadLayout = new QGridLayout(numpadPanel);
+        numpadLayout->setSpacing(2);
+        numpadLayout->setContentsMargins(0, 0, 0, 0);
+
+        // Numpad buttons
+        QPushButton *btnNum7 = createLargeButton("7", 36);
+        QPushButton *btnNum8 = createLargeButton("8", 36);
+        QPushButton *btnNum9 = createLargeButton("9", 36);
+        QPushButton *btnNumDivide = createLargeButton("/", 36);
+
+        QPushButton *btnNum4 = createLargeButton("4", 36);
+        QPushButton *btnNum5 = createLargeButton("5", 36);
+        QPushButton *btnNum6 = createLargeButton("6", 36);
+        QPushButton *btnNumMultiply = createLargeButton("*", 36);
+
+        QPushButton *btnNum1 = createLargeButton("1", 36);
+        QPushButton *btnNum2 = createLargeButton("2", 36);
+        QPushButton *btnNum3 = createLargeButton("3", 36);
+        QPushButton *btnNumMinus = createLargeButton("-", 36);
+
+        QPushButton *btnNum0 = createLargeButton("0", 36);
+        QPushButton *btnNumPlus = createLargeButton("+", 36);
+
+        numpadLayout->addWidget(btnNum7, 0, 0);
+        numpadLayout->addWidget(btnNum8, 0, 1);
+        numpadLayout->addWidget(btnNum9, 0, 2);
+        numpadLayout->addWidget(btnNumDivide, 0, 3);
+
+        numpadLayout->addWidget(btnNum4, 1, 0);
+        numpadLayout->addWidget(btnNum5, 1, 1);
+        numpadLayout->addWidget(btnNum6, 1, 2);
+        numpadLayout->addWidget(btnNumMultiply, 1, 3);
+
+        numpadLayout->addWidget(btnNum1, 2, 0);
+        numpadLayout->addWidget(btnNum2, 2, 1);
+        numpadLayout->addWidget(btnNum3, 2, 2);
+        numpadLayout->addWidget(btnNumMinus, 2, 3);
+
+        numpadLayout->addWidget(btnNum0, 3, 0, 1, 2); // Span 2 columns
+        numpadLayout->addWidget(btnNumPlus, 3, 2, 1, 2); // Span 2 columns
+
+        // Add panels to main layout
+        mainLayout->addWidget(mainPanel);
+        mainLayout->addWidget(numpadPanel);
 
         setCentralWidget(centralWidget);
 
@@ -704,7 +822,7 @@ private:
         connect(btnToggle1, &QPushButton::clicked, this, &ControlPanel::onToggle1Clicked);
         connect(btnToggle2, &QPushButton::clicked, this, &ControlPanel::onToggle2Clicked);
         connect(btnToggle3, &QPushButton::clicked, this, &ControlPanel::onToggle3Clicked);
-        connect(btnAction4, &QPushButton::clicked, this, &ControlPanel::onAction4Clicked);
+        connect(btnNumpadToggle, &QPushButton::clicked, this, &ControlPanel::onNumpadToggleClicked);
         connect(btnTab, &QPushButton::clicked, this, &ControlPanel::onTabClicked);
         connect(btnDel, &QPushButton::clicked, this, &ControlPanel::onDelClicked);
         connect(btnG, &QPushButton::clicked, this, &ControlPanel::onGClicked);
@@ -716,14 +834,47 @@ private:
         connect(btnF, &QPushButton::clicked, this, &ControlPanel::onFClicked);
         connect(btnB, &QPushButton::clicked, this, &ControlPanel::onBClicked);
         connect(closeButton, &QPushButton::clicked, this, &ControlPanel::onCloseClicked);
+
+        // Connect numpad buttons
+        connect(btnNum0, &QPushButton::clicked, this, &ControlPanel::onNum0Clicked);
+        connect(btnNum1, &QPushButton::clicked, this, &ControlPanel::onNum1Clicked);
+        connect(btnNum2, &QPushButton::clicked, this, &ControlPanel::onNum2Clicked);
+        connect(btnNum3, &QPushButton::clicked, this, &ControlPanel::onNum3Clicked);
+        connect(btnNum4, &QPushButton::clicked, this, &ControlPanel::onNum4Clicked);
+        connect(btnNum5, &QPushButton::clicked, this, &ControlPanel::onNum5Clicked);
+        connect(btnNum6, &QPushButton::clicked, this, &ControlPanel::onNum6Clicked);
+        connect(btnNum7, &QPushButton::clicked, this, &ControlPanel::onNum7Clicked);
+        connect(btnNum8, &QPushButton::clicked, this, &ControlPanel::onNum8Clicked);
+        connect(btnNum9, &QPushButton::clicked, this, &ControlPanel::onNum9Clicked);
+        connect(btnNumDivide, &QPushButton::clicked, this, &ControlPanel::onNumDivideClicked);
+        connect(btnNumMultiply, &QPushButton::clicked, this, &ControlPanel::onNumMultiplyClicked);
+        connect(btnNumMinus, &QPushButton::clicked, this, &ControlPanel::onNumMinusClicked);
+        connect(btnNumPlus, &QPushButton::clicked, this, &ControlPanel::onNumPlusClicked);
+
+        // Install event filter to detect when mouse enters the dialog
         centralWidget->installEventFilter(this);
+
         // Initial button states
-        updateButtonAppearance(btnToggle1, toggle1State);
-        updateButtonAppearance(btnToggle2, toggle2State);
-        updateButtonAppearance(btnToggle3, toggle3State);
+        updateButtonAppearance(btnToggle1, toggle1State, toggle1Locked);
+        updateButtonAppearance(btnToggle2, toggle2State, toggle2Locked);
+        updateButtonAppearance(btnToggle3, toggle3State, toggle3Locked);
 
         // Make only the drag button draggable
         dragButton->installEventFilter(this);
+
+        // Initially hide numpad
+        numpadVisible = false;
+        updateNumpadVisibility();
+    }
+
+
+    void updateNumpadVisibility() {
+        numpadPanel->setVisible(numpadVisible);
+        if (numpadVisible) {
+            btnNumpadToggle->setText("−"); // Minus symbol when expanded
+        } else {
+            btnNumpadToggle->setText("+"); // Plus symbol when collapsed
+        }
     }
 
     QPushButton* createLargeButton(const QString &text, int size) {
@@ -748,9 +899,28 @@ private:
         return button;
     }
 
-    void updateButtonAppearance(QPushButton *button, bool state) {
+    void updateButtonAppearance(QPushButton *button, bool state, bool locked) {
         QString style;
-        if (state) {
+        if (locked) {
+            // Locked state: Red appearance
+            style = QString(R"(
+                QPushButton {
+                    font-size: 10px;
+                    font-weight: bold;
+                    border: 2px solid #FF0000;
+                    border-radius: 4px;
+                    background-color: #FF4444;
+                    color: black;
+                }
+                QPushButton:pressed {
+                    background-color: #FF6666;
+                }
+                QPushButton:hover {
+                    border: 2px solid #FF3333;
+                }
+            )");
+        } else if (state) {
+            // Active state: Green appearance
             style = QString(R"(
                 QPushButton {
                     font-size: 10px;
@@ -768,6 +938,7 @@ private:
                 }
             )");
         } else {
+            // Inactive state: Default appearance
             style = QString(R"(
                 QPushButton {
                     font-size: 10px;
@@ -787,6 +958,7 @@ private:
         }
         button->setStyleSheet(style);
     }
+
 
     void moveMouseAway() {
         // Get the most frequent mouse position from the last second
@@ -929,6 +1101,8 @@ private:
         settings.setValue("position", pos());
     }
 
+    QHBoxLayout *mainLayout;
+
     QPushButton *btnToggle1;
     QPushButton *btnToggle2;
     QPushButton *btnToggle3;
@@ -937,12 +1111,20 @@ private:
     QString selectedWindow;
     QString selectedKeyboard;
     QString selectedWindowId;
+
+    QPushButton *btnNumpadToggle;
+    QWidget *numpadPanel;
+    bool numpadVisible = false;
     int keyboardFd = -1;
+
     Display* xdisplay = nullptr;
-    
+
     bool toggle1State = false;
     bool toggle2State = false;
     bool toggle3State = false;
+    bool toggle1Locked = false;
+    bool toggle2Locked = false;
+    bool toggle3Locked = false;
     QPoint dragPosition;
     MouseMonitor *mouseMonitor = nullptr;
     QPoint storedMousePosition;
