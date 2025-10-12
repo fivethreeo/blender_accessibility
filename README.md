@@ -2,23 +2,28 @@
 
 A lightweight Qt-based control panel application for sending keyboard events to specific windows, with special optimization for Blender 3D.
 
-![ControlPanel Demo](https://img.shields.io/badge/Status-Working-brightgreen) ![Qt6](https://img.shields.io/badge/Qt-6.x-blue) ![Linux](https://img.shields.io/badge/Platform-Linux-lightgrey)
+Status: Working | Qt6 | Platform: Linux
 
 ## Features
 
-- **Window Targeting**: Select specific application windows to control
-- **Raw Input Events**: Send keyboard events directly to target applications
-- **Blender Optimized**: Special focus handling for Blender's 3D viewport
-- **Toggle Buttons**: Visual toggle states for Shift, Ctrl, and Alt modifiers
-- **Action Button**: Send Numpad + key presses
-- **Smart Mouse Return**: Automatically returns mouse to control panel after operations
-- **Position Memory**: Remembers window position between sessions
-- **Always on Top**: Stays visible above other windows
-- **Draggable Interface**: Move the control panel anywhere on screen
+- Window Targeting: Select specific application windows to control with robust multi-method detection
+- Raw Input Events: Send keyboard events directly to target applications  
+- Blender Optimized: Special focus handling for Blender's 3D viewport
+- Smart Mouse Positioning: Remembers your work area and moves mouse intelligently
+- Lockable Modifiers: Three-state Shift, Ctrl, Alt with visual feedback (Off -> Green -> Red Locked)
+- Expandable Numpad: Full numeric keypad with operators that extends from the main panel
+- Comprehensive Key Set: G, E, S, X, Y, Z, F, B, Tab, Del for common Blender operations
+- Position Memory: Remembers window position between sessions
+- Always on Top: Stays visible above other windows
+- Draggable Interface: Move the control panel anywhere on screen
 
-## Screenshot
+## Screenshots
 
-![screenshot](screenshot.png)
+Collapsed View - Compact interface for daily use  
+See screenshot_collapsed.png
+
+Expanded View - Full numpad for numeric input  
+See screenshot_expanded.png
 
 ## Installation
 
@@ -28,7 +33,7 @@ A lightweight Qt-based control panel application for sending keyboard events to 
 # Ubuntu/Debian
 sudo apt-get install qt6-base-dev libx11-dev cmake build-essential
 
-# Fedora/RHEL
+# Fedora/RHEL  
 sudo dnf install qt6-qtbase-devel libX11-devel cmake gcc-c++
 ```
 
@@ -37,7 +42,7 @@ sudo dnf install qt6-qtbase-devel libX11-devel cmake gcc-c++
 ```bash
 # Clone the repository
 git clone https://github.com/fivethreeo/blender_accessibility.git
-cd ControlPanel
+cd blender_accessibility
 
 # Create build directory
 mkdir build
@@ -47,8 +52,6 @@ cd build
 cmake ..
 make
 
-# Install (optional)
-sudo make install
 ```
 
 ### Permissions Setup
@@ -64,39 +67,67 @@ sudo usermod -a -G input $USER
 
 ## Usage
 
-1. **Run the application**:
+1. Run the application:
    ```bash
    ./ControlPanel  # or sudo ./ControlPanel if permissions not set
    ```
 
-2. **Select Target**:
+2. Select Target:
    - Choose the target window (e.g., Blender)
-   - Select your keyboard device from the list
+   - Select your keyboard device from the list  
    - Click "Start Control"
 
-3. **Control Panel Operations**:
+3. Control Panel Layout:
 
-| Button | Function | Blender Use Case |
-|--------|----------|------------------|
-| Shift | Toggle Left Shift | Precise movement, snapping |
-| Ctrl | Toggle Left Control | Measurements, constraints |
-| Alt | Toggle Left Alt | Duplicate, special operations |
-| + | Send Numpad Plus | Zoom in, add objects |
-| × | Close Application | Exit ControlPanel |
-| ≡ | Drag Panel | Reposition control panel |
+Main Panel (Collapsed) screenshot:
 
-4. **Blender Workflow**:
-   - The panel is optimized for Blender - it ensures proper 3D view focus
-   - Mouse automatically returns to button position after operations
-   - Perfect for navigation and quick modifier key toggling
+![Main Panel (Collapsed)](screenshot_collapsed.png)
 
+Expanded with Numpad screenshot:
+
+![Main Panel (Expanded)](screenshot_expanded.png)
+
+4. Button Functions:
+
+Button       Function              Behavior
+Shift/Ctrl/Alt Three-state toggle  Off -> Active (Green) -> Locked (Red) -> Off
+X, Y, Z      Axis keys            Common transform axes
+G, S, E, F   Grab, Scale, Extrude Essential modeling tools  
+B, Tab, Del  Box Select, Mode     Selection and editing
++            Numpad Toggle        Expand/collapse numeric keypad
+×            Close Application    Exit ControlPanel
+≡            Drag Panel           Reposition control panel
+
+5. Modifier Key Behavior:
+   - First Click: Activates modifier (green) - turns off with other keys
+   - Second Click: Locks modifier (red) - stays active permanently
+   - Third Click: Turns off modifier
+
+6. Smart Mouse Features:
+   - Tracks mouse position for 3 seconds with 25px fuzzy tolerance
+   - Moves to your most frequent work area when buttons are clicked
+   - Numpad keys return mouse to original position
 
 ## Technical Details
 
 ### Architecture
-- **Frontend**: Qt6 Widgets application
-- **Backend**: X11 window management + Linux input subsystem
-- **Input**: Raw keyboard event injection via /dev/input/ devices
+- Frontend: Qt6 Widgets application with expandable layout
+- Backend: X11 window management + Linux input subsystem
+- Input: Raw keyboard event injection via /dev/input/ devices
+- Mouse Tracking: Continuous position monitoring with frequency analysis
+
+### Smart Mouse Algorithm
+- Records mouse position every 50ms (3-second history)
+- Groups positions within 25px tolerance for area detection
+- Finds most frequent work area using FIFO queue
+- Stores position when entering control panel
+
+### Window Detection
+Uses multiple methods for robust window enumeration:
+1. _NET_CLIENT_LIST (modern window managers)
+2. XQueryTree (fallback method)
+3. _NET_CLIENT_LIST_STACKING (alternative property)
+4. Filters system windows (desktop, panels, docks)
 
 ### Supported Systems
 - Linux with X11 window system
@@ -107,7 +138,7 @@ sudo usermod -a -G input $USER
 
 ### Common Issues
 
-1. **"No keyboard devices found"**:
+1. "No keyboard devices found":
    ```bash
    # Check available devices
    ls /dev/input/by-id/
@@ -116,15 +147,20 @@ sudo usermod -a -G input $USER
    ls -l /dev/input/by-id/
    ```
 
-2. **"Failed to open keyboard device"**:
+2. "Failed to open keyboard device":
    ```bash
    # Run with sudo or set permissions
    sudo ./ControlPanel
    ```
 
-3. **Window not focusing properly**:
-   - Ensure the target application is running
-   - Try selecting the window again from the dialog
+3. Windows not detected:
+   - Use the Refresh button in the setup dialog
+   - Ensure target applications have visible windows
+   - Some applications may use non-standard windowing
+
+4. Mouse positioning issues:
+   - Move mouse to desired area before using buttons
+   - The system learns your work area over 3 seconds
 
 ### Debug Mode
 
@@ -145,6 +181,24 @@ cmake -DCMAKE_BUILD_TYPE=Release ..
 make
 ```
 
+## Blender Workflow Tips
+
+1. Modeling Workflow:
+   - Lock Shift for precise movement
+   - Use G, S, E for grab, scale, extrude
+   - X, Y, Z for axis constraints
+   - Expand numpad for numeric input
+
+2. Navigation:
+   - Use locked modifiers for extended operations
+   - Smart mouse positioning keeps you in your work area
+   - Numpad for precise numeric transformations
+
+3. Efficiency:
+   - Keep common modifiers locked during complex operations
+   - Use the compact view for daily work
+   - Expand numpad only when needed for numbers
+
 ## Contributing
 
 1. Fork the repository
@@ -161,7 +215,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 - Qt Framework for the excellent cross-platform GUI library
 - X11 developers for window management capabilities
-- Blender community for inspiration
+- Blender community for inspiration and workflow optimization
 
 ## Support
 
@@ -173,4 +227,4 @@ If you encounter any issues or have questions:
 
 ---
 
-**Note**: This application requires appropriate permissions to access input devices. Use responsibly and only on systems you own or have permission to control.
+Note: This application requires appropriate permissions to access input devices. 
