@@ -12,7 +12,7 @@ Status: Working | Qt6 | Platform: Linux
 - Smart Mouse Positioning: Remembers your work area and moves mouse intelligently
 - Lockable Modifiers: Three-state Shift, Ctrl, Alt with visual feedback (Off -> Green -> Red Locked)
 - Expandable Numpad: Full numeric keypad with operators that extends from the main panel
-- Comprehensive Key Set: G, E, S, X, Y, Z, F, B, Tab, Del for common Blender operations
+- Comprehensive Key Set: G, R, S, E, X, Y, Z, F, B, Tab, Del for common Blender operations
 - Position Memory: Remembers window position between sessions
 - Always on Top: Stays visible above other windows
 - Draggable Interface: Move the control panel anywhere on screen
@@ -84,7 +84,7 @@ sudo usermod -a -G input $USER
 Button       Function              Behavior
 Shift/Ctrl/Alt Three-state toggle  Off -> Active (Green) -> Locked (Red) -> Off
 X, Y, Z      Axis keys            Common transform axes
-G, S, E, F   Grab, Scale, Extrude Essential modeling tools  
+G, R, S, E   Grab, Scale, Rotate, Extrude Essential modeling tools  
 B, Tab, Del  Box Select, Mode     Selection and editing
 +            Numpad Toggle        Expand/collapse numeric keypad
 ×            Close Application    Exit ControlPanel
@@ -177,19 +177,18 @@ make
 
 1. Modeling Workflow:
    - Lock Shift for precise movement
-   - Use G, S, E for grab, scale, extrude
+   - Use G, R, S, E, B for grab, rotate, scale, extrude, bevel
    - X, Y, Z for axis constraints
-   - Expand numpad for numeric input
 
 2. Navigation:
    - Use locked modifiers for extended operations
    - Smart mouse positioning keeps you in your work area
-   - Numpad for precise numeric transformations
+   - Numpad for viewpoints and navigation
 
 3. Efficiency:
    - Keep common modifiers locked during complex operations
    - Use the compact view for daily work
-   - Expand numpad only when needed for numbers
+   - Expand numpad only when needed navigation
 
 ## Contributing
 

@@ -639,14 +639,14 @@ private slots:
             });
         });
     }
-
-    void onGClicked() { onKeyClicked(KEY_G, "G"); }
-    void onEClicked() { onKeyClicked(KEY_E, "E"); }
-    void onSClicked() { onKeyClicked(KEY_S, "S"); }
     void onXClicked() { onKeyClicked(KEY_X, "X"); }
     void onYClicked() { onKeyClicked(KEY_Y, "Y"); }
     void onZClicked() { onKeyClicked(KEY_Z, "Z"); }
-    void onFClicked() { onKeyClicked(KEY_F, "F"); }
+    void onGClicked() { onKeyClicked(KEY_G, "G"); }
+    void onRClicked() { onKeyClicked(KEY_R, "R"); }
+    void onSClicked() { onKeyClicked(KEY_S, "S"); }
+    void onEClicked() { onKeyClicked(KEY_E, "E"); }
+
     void onBClicked() { onKeyClicked(KEY_B, "B"); }
 
     void onCloseClicked() {
@@ -746,16 +746,16 @@ private:
         gridLayout->addWidget(btnZ, 1, 2);
         gridLayout->addWidget(dragButton, 1, 3);
 
-        // Third row: G, S, E, F
+        // Third row: G, R, S, E
         QPushButton *btnG = createLargeButton("G", 36);
+        QPushButton *btnR = createLargeButton("R", 36);
         QPushButton *btnS = createLargeButton("S", 36);
         QPushButton *btnE = createLargeButton("E", 36);
-        QPushButton *btnF = createLargeButton("F", 36);
 
         gridLayout->addWidget(btnG, 2, 0);
-        gridLayout->addWidget(btnS, 2, 1);
-        gridLayout->addWidget(btnE, 2, 2);
-        gridLayout->addWidget(btnF, 2, 3);
+        gridLayout->addWidget(btnR, 2, 1);
+        gridLayout->addWidget(btnS, 2, 2);
+        gridLayout->addWidget(btnE, 2, 3);
 
         // Fourth row: B, Tab, Del, Numpad Toggle
         QPushButton *btnB = createLargeButton("B", 36);
@@ -826,12 +826,12 @@ private:
         connect(btnTab, &QPushButton::clicked, this, &ControlPanel::onTabClicked);
         connect(btnDel, &QPushButton::clicked, this, &ControlPanel::onDelClicked);
         connect(btnG, &QPushButton::clicked, this, &ControlPanel::onGClicked);
-        connect(btnE, &QPushButton::clicked, this, &ControlPanel::onEClicked);
+        connect(btnR, &QPushButton::clicked, this, &ControlPanel::onRClicked);
         connect(btnS, &QPushButton::clicked, this, &ControlPanel::onSClicked);
+        connect(btnE, &QPushButton::clicked, this, &ControlPanel::onEClicked);
         connect(btnX, &QPushButton::clicked, this, &ControlPanel::onXClicked);
         connect(btnY, &QPushButton::clicked, this, &ControlPanel::onYClicked);
         connect(btnZ, &QPushButton::clicked, this, &ControlPanel::onZClicked);
-        connect(btnF, &QPushButton::clicked, this, &ControlPanel::onFClicked);
         connect(btnB, &QPushButton::clicked, this, &ControlPanel::onBClicked);
         connect(closeButton, &QPushButton::clicked, this, &ControlPanel::onCloseClicked);
 
